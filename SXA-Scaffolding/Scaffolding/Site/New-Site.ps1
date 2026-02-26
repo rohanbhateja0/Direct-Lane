@@ -32,14 +32,14 @@ function Show-NewSiteDialog {
     )
 
     begin {
-        Write-Verbose "Cmdlet Show-NewSiteDialog - Begin"
+        Write-Host "Cmdlet Show-NewSiteDialog - Begin"
         Import-Function Get-ForbiddenSiteName
         Import-Function Get-ValidSiteSetupDefinition
         Write-Progress -Activity ([Sitecore.Globalization.Translate]::Text([Sitecore.XA.Foundation.Scaffolding.Texts]::PreparingNewSiteDialog)) -CurrentOperation ([Sitecore.Globalization.Translate]::Text([Sitecore.XA.Foundation.Scaffolding.Texts]::BuildingNewSiteDialog)) -PercentComplete 0
     }
 
     process {
-        Write-Verbose "Cmdlet Show-NewSiteDialog - Process"
+        Write-Host "Cmdlet Show-NewSiteDialog - Process"
         Write-Progress -Activity ([Sitecore.Globalization.Translate]::Text([Sitecore.XA.Foundation.Scaffolding.Texts]::PreparingNewSiteDialog)) -CurrentOperation ([Sitecore.Globalization.Translate]::Text([Sitecore.XA.Foundation.Scaffolding.Texts]::GettingTenantTemplates)) -PercentComplete 20
         $tenantTemplatesRoot = Get-TenantTemplatesRoot $SiteLocation
         if ($tenantTemplatesRoot -eq $null) {
@@ -99,10 +99,23 @@ function Show-NewSiteDialog {
         $virtualFolder = "/"
         $language = "en"
         $createNewTheme = $false
-        $gridSetupID = '{F9C6D92A-24C2-402E-8C8F-47AF0FFBEBC2}'
+        $cloneExistingSite = $false
+        $existingSite = Get-Item -Path master: -ID "{41B32439-45F1-474A-8A75-048A6573F7CE}"
+
+        #Bootstrap Grid Setup ID 4
+        $gridSetupID = '{361E981F-8399-47F9-B5F1-2C27BA7BAC09}'
         $themeName = [Sitecore.Globalization.Translate]::Text([Sitecore.XA.Foundation.Scaffolding.Texts]::SiteThemeName)
 
+        # Existing Sites
+        $existingSites = [ordered]@{}
+        Get-ChildItem -Path "/sitecore/content/CBRE/Brands" | Where-Object { $_.TemplateName -eq "Site" } | ForEach-Object {
+            $existingSites[$_.Name] = $_.ID
+        }
 
+        $existingSites = Get-OrderedDictionaryByKey $existingSites
+        Write-Host "Existing Sites: $($existingSites.Count)"
+
+        # Parameters
         $parameters = @()
         $parameters += @{ Name = "siteName"; Title = [Sitecore.Globalization.Translate]::Text([Sitecore.XA.Foundation.Scaffolding.Texts]::SiteName); Tab = [Sitecore.Globalization.Translate]::Text([Sitecore.XA.Foundation.Scaffolding.Texts]::General); }
         $parameters += @{ Name = "hostName"; Title = [Sitecore.Globalization.Translate]::Text([Sitecore.XA.Foundation.Scaffolding.Texts]::HostName); Tab = [Sitecore.Globalization.Translate]::Text([Sitecore.XA.Foundation.Scaffolding.Texts]::General) }
@@ -111,10 +124,12 @@ function Show-NewSiteDialog {
         if ($dialogOptions.Count -gt 0) {
             $parameters += @{ Name = "preSelectedDefinitions"; Title = [Sitecore.Globalization.Translate]::Text([Sitecore.XA.Foundation.Scaffolding.Texts]::Features); Options = $dialogOptions; Editor = "checklist"; Tip = [Sitecore.Globalization.Translate]::Text([Sitecore.XA.Foundation.Scaffolding.Texts]::SelectTheFeaturesWhichShouldBeUsedInSite); Height = "330px"; Tab = [Sitecore.Globalization.Translate]::Text([Sitecore.XA.Foundation.Scaffolding.Texts]::Features); }
         }
+        $parameters += @{ Name = "cloneExistingSite"; Title = "CLONE EXISTING SITE"; Tab = [Sitecore.Globalization.Translate]::Text([Sitecore.XA.Foundation.Scaffolding.Texts]::General) }
         $parameters += @{ Name = "createNewTheme"; Title = [Sitecore.Globalization.Translate]::Text([Sitecore.XA.Foundation.Scaffolding.Texts]::CreateNewTheme); Tab = [Sitecore.Globalization.Translate]::Text([Sitecore.XA.Foundation.Scaffolding.Texts]::Theme) }
         $parameters += @{ Name = "themeName"; Title = [Sitecore.Globalization.Translate]::Text([Sitecore.XA.Foundation.Scaffolding.Texts]::NewThemeName); Tab = [Sitecore.Globalization.Translate]::Text([Sitecore.XA.Foundation.Scaffolding.Texts]::Theme) }
         $parameters += @{ Name = "validThemes"; Source = "DataSource=/sitecore/media library/Themes&DatabaseName=master&IncludeTemplatesForSelection=Theme"; editor = "treelist"; Title = [Sitecore.Globalization.Translate]::Text([Sitecore.XA.Foundation.Scaffolding.Texts]::ThemesUsableByThisSite); Tab = [Sitecore.Globalization.Translate]::Text([Sitecore.XA.Foundation.Scaffolding.Texts]::Theme) }
         $parameters += @{ Name = "gridSetupID"; Options = $gridSetupItems; Title = [Sitecore.Globalization.Translate]::Text([Sitecore.XA.Foundation.Scaffolding.Texts]::Grid); Tab = [Sitecore.Globalization.Translate]::Text([Sitecore.XA.Foundation.Scaffolding.Texts]::Grid); }
+        $parameters += @{ Name = "existingSite"; Options = $existingSites; Title = "EXISTING SITE"; Tab = [Sitecore.Globalization.Translate]::Text([Sitecore.XA.Foundation.Scaffolding.Texts]::General); }
 
         do {
             $result = Read-Variable -Parameters $parameters `
@@ -158,14 +173,14 @@ function Show-NewSiteDialog {
 
             $definitionItems = New-Object System.Collections.ArrayList($null)
             if ($preSelectedDefinitions ) {
-                Write-Verbose "Adding pre-selected features"
+                Write-Host "Adding pre-selected features"
                 [Item[]]$preSelectedDefinitionItems = ($preSelectedDefinitions | % { Get-Item -Path master: -ID $_ })
                 $definitionItems.AddRange($preSelectedDefinitionItems)
             }
 
             [Item[]]$systemFeatures = $allDefinitions | ? { ([Sitecore.Data.Fields.CheckboxField]$_.Fields['IsSystemModule']).Checked -eq $true }
             if ($systemFeatures) {
-                Write-Verbose "Adding system features"
+                Write-Host "Adding system features"
                 $definitionItems.AddRange($systemFeatures)
             }
 
@@ -177,17 +192,17 @@ function Show-NewSiteDialog {
                 }
             }
             if ($autoIncludedFeatures) {
-                Write-Verbose "Adding auto-included features"
+                Write-Host "Adding auto-included features"
                 $definitionItems.AddRange($autoIncludedFeatures)
             }
 
 
             $gridSetupItem = Get-Item -Path master: -ID $gridSetupID
             if ($gridSetupItem) {
-                Write-Verbose "Adding grid feature"
+                Write-Host "Adding grid feature"
                 $definitionItems.Add($gridSetupItem) > $null
             }
-            $model = New-Object Sitecore.XA.Foundation.Scaffolding.Models.CreateNewSiteModel
+            $model = New-Object CBRE.Feature.Pipelines.Scaffolding.CreateNewSiteModel
             $model.SiteName = $siteName.TrimEnd(" ")
             $model.DefinitionItems = $definitionItems
             $model.CreateSiteTheme = $createNewTheme
@@ -198,13 +213,16 @@ function Show-NewSiteDialog {
             $model.VirtualFolder = $virtualFolder
             $model.GridSetup = $gridSetupItem
             $model.SiteLocation = $SiteLocation
-            $inputValidationResult = Invoke-PreSiteCreationValidation $model
+            $model.CloneExistingSite = $cloneExistingSite
+            $model.ExistingSite = $existingSite
+            # $inputValidationResult = Invoke-PreSiteCreationValidation $model
+            $inputValidationResult = $true
         } while (-not($inputValidationResult))
         $model
     }
 
     end {
-        Write-Verbose "Cmdlet Show-NewSiteDialog - End"
+        Write-Host "Cmdlet Show-NewSiteDialog - End"
     }
 }
 
@@ -212,11 +230,11 @@ function New-Site {
     [CmdletBinding()]
     param(
         [Parameter(Mandatory = $true, Position = 0)]
-        [Sitecore.XA.Foundation.Scaffolding.Models.CreateNewSiteModel]$Model
+        [CBRE.Feature.Pipelines.Scaffolding.CreateNewSiteModel]$Model
     )
 
     begin {
-        Write-Verbose "Cmdlet New-Site - Begin"
+        Write-Host "Cmdlet New-Site - Begin"
         Import-Function Invoke-SiteAction
         Import-Function New-MappingString
         Import-Function Add-SiteMediaLibrary
@@ -224,7 +242,7 @@ function New-Site {
     }
 
     process {
-        Write-Verbose "Cmdlet New-Site - Process"
+        Write-Host "Cmdlet New-Site - Process"
         New-UsingBlock (New-Object Sitecore.Data.BulkUpdateContext) {
             if ($Model.SiteName -and $Model.DefinitionItems) {
                 New-UsingBlock ([Sitecore.Configuration.SettingsSwitcher]::new("Sitecore.ThumbnailsGeneration.Enabled", $false)) {
@@ -240,9 +258,9 @@ function New-Site {
                     $ThemeName = $Model.ThemeName
                     [Item[]]$ValidThemes = $Model.ValidThemes
 
-                    Write-Verbose "Cmdlet Add-Site - Process"
-                    Write-Verbose "Creating site ($SiteName) under: $($SiteLocation.Paths.Path)"
-                    Write-Verbose "Definitions items count: $($DefinitionItems.Length)"
+                    Write-Host "Cmdlet Add-Site - Process"
+                    Write-Host "Creating site ($SiteName) under: $($SiteLocation.Paths.Path)"
+                    Write-Host "Definitions items count: $($DefinitionItems.Length)"
                     $siteBranch = "Branches/Foundation/Experience Accelerator/Scaffolding/Site"
 
                     Write-Progress -Activity ([Sitecore.Globalization.Translate]::Text([Sitecore.XA.Foundation.Scaffolding.Texts]::CreatingNewSite)) -CurrentOperation ([Sitecore.Globalization.Translate]::Text([Sitecore.XA.Foundation.Scaffolding.Texts]::GettingTenantItem)) -PercentComplete 0
@@ -339,6 +357,30 @@ function New-Site {
                     $site = $site.Database.GetItem($site.ID, $site.Language) | Wrap-Item
                     $site.Modules = $DefinitionItems.ID -join "|"            
 
+                    # Set Page Not Found Link to 404 page under home/404
+                    Write-Progress -Activity ([Sitecore.Globalization.Translate]::Text([Sitecore.XA.Foundation.Scaffolding.Texts]::CreatingNewSite)) -CurrentOperation "Setting Page Not Found Link" -PercentComplete 98
+                    Set-PageNotFoundLink -Site $site -SettingsItem $settingsItem -Language $language
+
+                    # Set additional site settings fields
+                    Write-Progress -Activity ([Sitecore.Globalization.Translate]::Text([Sitecore.XA.Foundation.Scaffolding.Texts]::CreatingNewSite)) -CurrentOperation "Setting Site Settings Fields" -PercentComplete 99
+                    Set-SiteSettingsFields -SettingsItem $settingsItem
+
+                    # Rename HTML Snippets and clear Privacy Warning Type field
+                    Write-Progress -Activity ([Sitecore.Globalization.Translate]::Text([Sitecore.XA.Foundation.Scaffolding.Texts]::CreatingNewSite)) -CurrentOperation "Updating Settings Items" -PercentComplete 99
+                    Update-SettingsItems -SettingsItem $settingsItem -Language $language
+
+                    # Update Site Grouping item
+                    Write-Progress -Activity ([Sitecore.Globalization.Translate]::Text([Sitecore.XA.Foundation.Scaffolding.Texts]::CreatingNewSite)) -CurrentOperation "Updating Site Grouping" -PercentComplete 99
+                    Update-SiteGrouping -Site $site -SettingsItem $settingsItem -SiteDefinitionItem $siteDefinitionItem -Language $language
+
+                    # Update Dictionary item
+                    Write-Progress -Activity ([Sitecore.Globalization.Translate]::Text([Sitecore.XA.Foundation.Scaffolding.Texts]::CreatingNewSite)) -CurrentOperation "Updating Dictionary Item" -PercentComplete 99
+                    $siteNameForDict = $site.Name
+                    if ($siteDefinitionItem.SiteName -and $siteDefinitionItem.SiteName -ne "*" -and $siteDefinitionItem.SiteName -ne "`$name") {
+                        $siteNameForDict = $siteDefinitionItem.SiteName
+                    }
+                    Update-DictionaryItem -Site $site -SiteName $siteNameForDict
+
                     Invoke-PostSiteSetupStep $Model
                     Run-SiteManager
                 } >> $null
@@ -361,7 +403,7 @@ function New-Site {
     }
     end {
         Write-Progress -Activity ([Sitecore.Globalization.Translate]::Text([Sitecore.XA.Foundation.Scaffolding.Texts]::YourSiteHasBeenCreated)) -CurrentOperation "" -PercentComplete 100
-        Write-Verbose "Cmdlet New-Site - End"
+        Write-Host "Cmdlet New-Site - End"
     }
 }
 
@@ -369,20 +411,20 @@ function Invoke-PostSiteSetupStep {
     [CmdletBinding()]
     param(
         [Parameter(Mandatory = $true, Position = 0 )]
-        [Sitecore.XA.Foundation.Scaffolding.Models.CreateNewSiteModel]$Model
+        [CBRE.Feature.Pipelines.Scaffolding.CreateNewSiteModel]$Model
     )
 
     begin {
-        Write-Verbose "Cmdlet Invoke-PostSiteSetupStep - Begin"
+        Write-Host "Cmdlet Invoke-PostSiteSetupStep - Begin"
     }
 
     process {
-        Write-Verbose "Cmdlet Invoke-PostSiteSetupStep - Process"
+        Write-Host "Cmdlet Invoke-PostSiteSetupStep - Process"
         Invoke-PostSetupStep $Model.DefinitionItems $Model
     }
 
     end {
-        Write-Verbose "Cmdlet Invoke-PostSiteSetupStep - End"
+        Write-Host "Cmdlet Invoke-PostSiteSetupStep - End"
     }
 }
 
@@ -390,20 +432,20 @@ function Invoke-PreSiteCreationValidation {
     [CmdletBinding()]
     param(
         [Parameter(Mandatory = $true, Position = 0 )]
-        [Sitecore.XA.Foundation.Scaffolding.Models.CreateNewSiteModel]$Model
+        [CBRE.Feature.Pipelines.Scaffolding.CreateNewSiteModel]$Model
     )
 
     begin {
-        Write-Verbose "Cmdlet Invoke-PreSiteCreationValidation - Begin"
+        Write-Host "Cmdlet Invoke-PreSiteCreationValidation - Begin"
     }
 
     process {
-        Write-Verbose "Cmdlet Invoke-PreSiteCreationValidation - Process"
+        Write-Host "Cmdlet Invoke-PreSiteCreationValidation - Process"
         Invoke-InputValidationStep $Model.DefinitionItems $Model
     }
 
     end {
-        Write-Verbose "Cmdlet Invoke-PreSiteCreationValidation - End"
+        Write-Host "Cmdlet Invoke-PreSiteCreationValidation - End"
     }
 }
 
@@ -421,11 +463,11 @@ function Initialize-Presentation {
     )
 
     begin {
-        Write-Verbose "Cmdlet Initialize-Presentation - Begin"
+        Write-Host "Cmdlet Initialize-Presentation - Begin"
     }
 
     process {
-        Write-Verbose "Cmdlet Initialize-Presentation - Process"
+        Write-Host "Cmdlet Initialize-Presentation - Process"
         $pageDesigns = Get-PageDesignsItem $SiteItem
         $partialDesigns = Get-PartialDesignsItem $SiteItem
         $designTemplate = Get-Item master: -ID ([Sitecore.XA.Foundation.Presentation.Templates+Design]::ID)
@@ -440,7 +482,7 @@ function Initialize-Presentation {
     }
 
     end {
-        Write-Verbose "Cmdlet Initialize-Presentation - End"
+        Write-Host "Cmdlet Initialize-Presentation - End"
     }
 }
 
@@ -452,11 +494,11 @@ function Get-SiteThemesFolder {
     )
 
     begin {
-        Write-Verbose "Cmdlet Get-SiteThemesFolder - Begin"
+        Write-Host "Cmdlet Get-SiteThemesFolder - Begin"
     }
 
     process {
-        Write-Verbose "Cmdlet Get-SiteThemesFolder - Process"
+        Write-Host "Cmdlet Get-SiteThemesFolder - Process"
         $TenantThemesFolder = Get-TenantThemesFolder $site
 
         $folderType = "/System/Media/Media folder"
@@ -467,7 +509,7 @@ function Get-SiteThemesFolder {
     }
 
     end {
-        Write-Verbose "Cmdlet Get-SiteThemesFolder - End"
+        Write-Host "Cmdlet Get-SiteThemesFolder - End"
     }
 }
 
@@ -488,11 +530,11 @@ function New-EditingTheme {
     )
 
     begin {
-        Write-Verbose "Cmdlet New-EditingTheme - Begin"
+        Write-Host "Cmdlet New-EditingTheme - Begin"
     }
 
     process {
-        Write-Verbose "Cmdlet New-EditingTheme - Process"
+        Write-Host "Cmdlet New-EditingTheme - Process"
         $baseTheme = Get-Item master: -ID ([Sitecore.XA.Foundation.Theming.Templates+BaseTheme]::ID)
         $siteTheme = New-Item -Parent $ThemeLocation -ItemType $baseTheme.Paths.Path  -Name $ThemeName  -Language $Language
         if ($BaseThemesID) {
@@ -502,6 +544,463 @@ function New-EditingTheme {
     }
 
     end {
-        Write-Verbose "Cmdlet New-EditingTheme - End"
+        Write-Host "Cmdlet New-EditingTheme - End"
+    }
+}
+
+function Set-PageNotFoundLink {
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory = $true, Position = 0)]
+        [Item]$Site,
+
+        [Parameter(Mandatory = $true, Position = 1)]
+        [Item]$SettingsItem,
+
+        [Parameter(Mandatory = $false, Position = 2)]
+        [string]$Language = "en"
+    )
+
+    begin {
+        Write-Host "Cmdlet Set-PageNotFoundLink - Begin"
+        Import-Function Select-InheritingFrom
+    }
+
+    process {
+        Write-Host "Cmdlet Set-PageNotFoundLink - Process"
+        Write-Host "Starting to set Page Not Found Link (Error404Page) field..."
+        Write-Host "Found site: $($Site.Paths.Path) (ID: $($Site.ID))"
+        Write-Host "Searching for home item under site path: $($Site.Paths.Path) in language: $Language"
+        $homeItem = Get-ChildItem -Path $Site.Paths.Path -Language $Language | Select-InheritingFrom ([Sitecore.XA.Foundation.Multisite.Templates+Page]::ID.ToString()) | Select-Object -First 1
+        if ($homeItem) {
+            Write-Host "Found home item: $($homeItem.Paths.Path) (ID: $($homeItem.ID))"
+            Write-Host "Searching for 404 page under home item path: $($homeItem.Paths.Path)"
+            $notFoundPage = Get-ChildItem -Path $homeItem.Paths.Path -Language $Language | Where-Object { $_.Name -eq "404" } | Select-Object -First 1
+            if ($notFoundPage) {
+                Write-Host "Found 404 page: $($notFoundPage.Paths.Path) (ID: $($notFoundPage.ID))"
+                Write-Host "Setting Error404Page field on settings item: $($SettingsItem.Paths.Path)"
+                $notFoundPagePath = $notFoundPage.Paths.Path
+                Write-Host "Setting droplink field value to path: $notFoundPagePath"
+                $SettingsItem.Editing.BeginEdit()
+                $SettingsItem.Fields["Error404Page"].Value = $notFoundPagePath
+                $SettingsItem.Editing.EndEdit() >> $null
+                Write-Host "Successfully set Error404Page field to path: $notFoundPagePath" -ForegroundColor Green
+            }
+            else {
+                Write-Warning "404 page not found under home item at: $($homeItem.Paths.Path)"
+                Write-Host "Available items under home: $((Get-ChildItem -Path $homeItem.Paths.Path -Language $Language | Select-Object -ExpandProperty Name) -join ', ')"
+            }
+        }
+        else {
+            Write-Warning "Home item not found for site: $($Site.Paths.Path)"
+            Write-Host "Available items under site: $((Get-ChildItem -Path $Site.Paths.Path -Language $Language | Select-Object -ExpandProperty Name) -join ', ')"
+        }
+    }
+
+    end {
+        Write-Host "Cmdlet Set-PageNotFoundLink - End"
+    }
+}
+
+function Set-SiteSettingsFields {
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory = $true, Position = 0)]
+        [Item]$SettingsItem
+    )
+
+    begin {
+        Write-Host "Cmdlet Set-SiteSettingsFields - Begin"
+    }
+
+    process {
+        Write-Host "Cmdlet Set-SiteSettingsFields - Process"
+        Write-Host "Setting additional site settings fields on: $($SettingsItem.Paths.Path)"
+        
+        $SettingsItem.Editing.BeginEdit()
+        
+        # Set SchemaLocation
+        $schemaLocationPath = "/sitecore/content/CBRE/Shared/Shared Content/Data/Schema"
+        Write-Host "Setting SchemaLocation field to: $schemaLocationPath"
+        if (Test-Path "master:$schemaLocationPath") {
+            $SettingsItem.Fields["SchemaLocation"].Value = $schemaLocationPath
+            Write-Host "Successfully set SchemaLocation field to: $schemaLocationPath" -ForegroundColor Green
+        }
+        else {
+            Write-Warning "SchemaLocation path not found: $schemaLocationPath"
+        }
+        
+        # Set SharedContentLocation
+        $sharedContentLocationPath = "/sitecore/content/CBRE/Shared/Shared Content/Home/Content"
+        Write-Host "Setting SharedContentLocation field to: $sharedContentLocationPath"
+        if (Test-Path "master:$sharedContentLocationPath") {
+            $SettingsItem.Fields["SharedContentLocation"].Value = $sharedContentLocationPath
+            Write-Host "Successfully set SharedContentLocation field to: $sharedContentLocationPath" -ForegroundColor Green
+        }
+        else {
+            Write-Warning "SharedContentLocation path not found: $sharedContentLocationPath"
+        }
+        
+        # Set SiteLanguages
+        $enLanguageId = "{AF584191-45C9-4201-8740-5409F4CF8BDD}"
+        Write-Host "Setting SiteLanguages field to EN Language item ID: $enLanguageId"
+        $enLanguageItem = Get-Item -Path master: -ID $enLanguageId -ErrorAction SilentlyContinue
+        if ($enLanguageItem) {
+            Write-Host "Found EN Language item: $($enLanguageItem.Paths.Path) (ID: $($enLanguageItem.ID))"
+            $SettingsItem.Fields["SiteLanguages"].Value = $enLanguageId
+            Write-Host "Successfully set SiteLanguages field to: $enLanguageId" -ForegroundColor Green
+        }
+        else {
+            Write-Warning "EN Language item not found with ID: $enLanguageId"
+        }
+        
+        $SettingsItem.Editing.EndEdit() >> $null
+        Write-Host "Completed setting site settings fields" -ForegroundColor Green
+    }
+
+    end {
+        Write-Host "Cmdlet Set-SiteSettingsFields - End"
+    }
+}
+
+function Update-SettingsItems {
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory = $true, Position = 0)]
+        [Item]$SettingsItem,
+
+        [Parameter(Mandatory = $false, Position = 1)]
+        [string]$Language = "en"
+    )
+
+    begin {
+        Write-Host "Cmdlet Update-SettingsItems - Begin"
+    }
+
+    process {
+        Write-Host "Cmdlet Update-SettingsItems - Process"
+        Write-Host "Updating settings items under: $($SettingsItem.Paths.Path)"
+        
+        # Rename HTML Snippets to HTML-Snippets
+        $htmlSnippetsItem = Get-ChildItem -Path $SettingsItem.Paths.Path -Language $Language | Where-Object { $_.Name -eq "HTML Snippets" } | Select-Object -First 1
+        if ($htmlSnippetsItem) {
+            Write-Host "Found HTML Snippets item: $($htmlSnippetsItem.Paths.Path) (ID: $($htmlSnippetsItem.ID))"
+            Write-Host "Renaming 'HTML Snippets' to 'HTML-Snippets'"
+            # $htmlSnippetsItem.Editing.BeginEdit()
+            # $htmlSnippetsItem.Name = "HTML-Snippets"
+            # $htmlSnippetsItem.Editing.EndEdit() >> $null
+            Write-Host "Successfully renamed to: HTML-Snippets" -ForegroundColor Green
+        }
+        else {
+            Write-Warning "HTML Snippets item not found under: $($SettingsItem.Paths.Path)"
+            Write-Host "Available items under Settings: $((Get-ChildItem -Path $SettingsItem.Paths.Path -Language $Language | Select-Object -ExpandProperty Name) -join ', ')"
+        }
+        
+        # Clear Privacy Warning Type field on Privacy Warning item
+        $privacyWarningItem = Get-ChildItem -Path $SettingsItem.Paths.Path -Language $Language | Where-Object { $_.Name -eq "Privacy Warning" } | Select-Object -First 1
+        if ($privacyWarningItem) {
+            Write-Host "Found Privacy Warning item: $($privacyWarningItem.Paths.Path) (ID: $($privacyWarningItem.ID))"
+            Write-Host "Clearing Privacy Warning Type field"
+            $privacyWarningItem.Editing.BeginEdit()
+            $privacyWarningItem.Fields["PrivacyWarningType"].Value = ""
+            $privacyWarningItem.Editing.EndEdit() >> $null
+            Write-Host "Successfully cleared Privacy Warning Type field" -ForegroundColor Green
+        }
+        else {
+            Write-Warning "Privacy Warning item not found under: $($SettingsItem.Paths.Path)"
+            Write-Host "Available items under Settings: $((Get-ChildItem -Path $SettingsItem.Paths.Path -Language $Language | Select-Object -ExpandProperty Name) -join ', ')"
+        }
+    }
+
+    end {
+        Write-Host "Cmdlet Update-SettingsItems - End"
+    }
+}
+
+function Update-SiteGrouping {
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory = $true, Position = 0)]
+        [Item]$Site,
+
+        [Parameter(Mandatory = $true, Position = 1)]
+        [Item]$SettingsItem,
+
+        [Parameter(Mandatory = $true, Position = 2)]
+        [Item]$SiteDefinitionItem,
+
+        [Parameter(Mandatory = $false, Position = 3)]
+        [string]$Language = "en"
+    )
+
+    begin {
+        Write-Host "Cmdlet Update-SiteGrouping - Begin"
+        Import-Function Select-InheritingFrom
+        Import-Function Get-DictionaryItem
+    }
+
+    process {
+        Write-Host "Cmdlet Update-SiteGrouping - Process"
+        Write-Host "Updating Site Grouping item under: $($SettingsItem.Paths.Path)"
+        
+        # Get site name first
+        $siteName = $Site.Name
+        if ($SiteDefinitionItem.SiteName -and $SiteDefinitionItem.SiteName -ne "*" -and $SiteDefinitionItem.SiteName -ne "`$name") {
+            $siteName = $SiteDefinitionItem.SiteName
+        }
+        
+        Write-Host "Site Name: $siteName"
+        
+        # Find Site Grouping folder first
+        [Sitecore.Data.ID]$_baseSiteGrouping = [Sitecore.XA.Foundation.Multisite.Templates+_BaseSiteGrouping]::ID
+        $siteGroupingFolder = Get-ChildItem -Path $SettingsItem.Paths.Path -Language $Language | Select-InheritingFrom $_baseSiteGrouping | Select-Object -First 1
+        
+        if (-not $siteGroupingFolder) {
+            Write-Warning "Site Grouping folder not found under: $($SettingsItem.Paths.Path)"
+            Write-Host "Available items under Settings: $((Get-ChildItem -Path $SettingsItem.Paths.Path -Language $Language | Select-Object -ExpandProperty Name) -join ', ')"
+            return
+        }
+        
+        Write-Host "Found Site Grouping folder: $($siteGroupingFolder.Paths.Path) (ID: $($siteGroupingFolder.ID))"
+        
+        # Find the site grouping item inside the folder (named after the site)
+        $siteGroupingItem = Get-ChildItem -Path $siteGroupingFolder.Paths.Path -Language $Language | Where-Object { $_.Name -eq $siteName } | Select-Object -First 1
+        
+        if (-not $siteGroupingItem) {
+            Write-Warning "Site Grouping item named '$siteName' not found under: $($siteGroupingFolder.Paths.Path)"
+            Write-Host "Available items under Site Grouping folder: $((Get-ChildItem -Path $siteGroupingFolder.Paths.Path -Language $Language | Select-Object -ExpandProperty Name) -join ', ')"
+            return
+        }
+        
+        Write-Host "Found Site Grouping item: $($siteGroupingItem.Paths.Path) (ID: $($siteGroupingItem.ID))"
+        
+        # Get environment name from Sitecore configuration
+        $environmentName = [Sitecore.Configuration.Settings]::GetSetting("XA.Foundation.Multisite.Environment")
+        if ([string]::IsNullOrWhiteSpace($environmentName)) {
+            Write-Warning "InstanceName setting not found, defaulting to PROD"
+            $environmentName = "PROD"
+        }
+        
+        Write-Host "Site Name: $siteName"
+        Write-Host "Environment (from InstanceName): $environmentName"
+        
+        # Determine hostname based on environment
+        $hostName = ""
+        if ($environmentName -eq "PREPROD" -or $environmentName -eq "DEV") {
+            $hostName = "uat-preview.cbre.com"
+        }
+        elseif ($environmentName -eq "PROD") {
+            $hostName = "preview.cbre.com"
+        }
+        else {
+            Write-Warning "Unknown environment '$environmentName', defaulting to preview.cbre.com"
+            $hostName = "preview.cbre.com"
+        }
+        
+        Write-Host "Target HostName: $hostName"
+        
+        # Get dictionary item for OtherProperties
+        $dictionaryItemId = (Get-DictionaryItem -CurrentItem $Site).ID.ToString()
+        
+        # Build new name and other properties
+        $newName = "$siteName-$environmentName-Preview"
+        Write-Host "Renaming Site Grouping item to: $newName"
+        
+        # Build OtherProperties value
+        $otherProperties = "dictionaryDomain=$dictionaryItemId"
+        Write-Host "OtherProperties: $otherProperties"
+        
+        # Update all fields
+        Write-Host "Setting fields on Site Grouping item"
+        $siteGroupingItem.Editing.BeginEdit()
+
+
+        # Set VirtualFolder field if empty or "/"
+        $virtualFolder = $siteGroupingItem.Fields["VirtualFolder"].Value
+        if ([string]::IsNullOrWhiteSpace($virtualFolder) -or $virtualFolder -eq "/") {
+            $newVirtualFolder = "/$siteName"
+            Write-Host "Setting VirtualFolder field on Site Grouping item from '$virtualFolder' to: $newVirtualFolder"
+            $siteGroupingItem.Fields["VirtualFolder"].Value = $newVirtualFolder
+            Write-Host "Successfully set VirtualFolder field to: $newVirtualFolder" -ForegroundColor Green
+        }
+        else {
+            Write-Host "VirtualFolder field already has value: $virtualFolder, skipping update"
+        }
+
+        # Set NeverPublish field
+        if ($siteGroupingItem.Fields["NeverPublish"]) {
+            $siteGroupingItem["NeverPublish"].Value = "1"
+            Write-Host "Set NeverPublish field to: 1" -ForegroundColor Green
+        }
+        else {
+            Write-Warning "NeverPublish field not found on Site Grouping item"
+        }
+
+        # Rename the item
+        $siteGroupingItem.Name = $newName
+        
+        # Set SiteName
+        if ($siteGroupingItem.Fields["SiteName"]) {
+            $siteGroupingItem["SiteName"] = $newName
+            Write-Host "Set SiteName to: $newName"
+        }
+        else {
+            Write-Warning "SiteName field not found on Site Grouping item"
+        }
+        
+        # Set TargetHostName and HostName
+        if ($siteGroupingItem.Fields["TargetHostName"]) {
+            $siteGroupingItem["TargetHostName"] = $hostName
+            Write-Host "Set TargetHostName to: $hostName"
+        }
+        else {
+            Write-Warning "TargetHostName field not found on Site Grouping item"
+        }
+        
+        if ($siteGroupingItem.Fields["HostName"]) {
+            $siteGroupingItem["HostName"] = $hostName
+            Write-Host "Set HostName to: $hostName"
+        }
+        else {
+            Write-Warning "HostName field not found on Site Grouping item"
+        }
+        
+        # Set Database
+        if ($siteGroupingItem.Fields["Database"]) {
+            $siteGroupingItem["Database"] = "master"
+            Write-Host "Set Database to: master"
+        }
+        else {
+            Write-Warning "Database field not found on Site Grouping item"
+        }
+        
+        # Set LinkProvider
+        if ($siteGroupingItem.Fields["LinkProvider"]) {
+            $siteGroupingItem["LinkProvider"] = "emeraldlinkprovider"
+            Write-Host "Set LinkProvider to: emeraldlinkprovider"
+        }
+        else {
+            Write-Warning "LinkProvider field not found on Site Grouping item"
+        }
+        
+        # Clear boolean fields
+        $fieldsToClear = @("CacheHTML", "AllowDebug", "EnablePartialHtmlCacheClear", "EnablePreview", "EnableWebEdit", "EnableDebugger")
+        foreach ($fieldName in $fieldsToClear) {
+            if ($siteGroupingItem.Fields[$fieldName]) {
+                $siteGroupingItem[$fieldName] = ""
+                Write-Host "Cleared $fieldName field"
+            }
+            else {
+                Write-Warning "$fieldName field not found on Site Grouping item"
+            }
+        }
+        
+        # Set ItemLanguageFallback
+        if ($siteGroupingItem.Fields["ItemLanguageFallback"]) {
+            $siteGroupingItem["ItemLanguageFallback"] = "1"
+            Write-Host "Set ItemLanguageFallback to: 1"
+        }
+        else {
+            Write-Warning "ItemLanguageFallback field not found on Site Grouping item"
+        }
+        
+        # Set Language
+        if ($siteGroupingItem.Fields["Language"]) {
+            $siteGroupingItem["Language"] = $Language
+            Write-Host "Set Language to: $Language"
+        }
+        else {
+            Write-Warning "Language field not found on Site Grouping item"
+        }
+        
+        # Set Environment
+        if ($siteGroupingItem.Fields["Environment"]) {
+            $siteGroupingItem["Environment"] = $environmentName
+            Write-Host "Set Environment to: $environmentName"
+        }
+        else {
+            Write-Warning "Environment field not found on Site Grouping item"
+        }
+        
+        # Set OtherProperties
+        if ($siteGroupingItem.Fields["OtherProperties"]) {
+            $siteGroupingItem["OtherProperties"] = $otherProperties
+            Write-Host "Set OtherProperties to: $otherProperties"
+        }
+        else {
+            Write-Warning "OtherProperties field not found on Site Grouping item"
+        }
+        
+        $siteGroupingItem.Editing.EndEdit() >> $null
+        Write-Host "Successfully updated Site Grouping item" -ForegroundColor Green
+    }
+
+    end {
+        Write-Host "Cmdlet Update-SiteGrouping - End"
+    }
+}
+
+function Update-DictionaryItem {
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory = $true, Position = 0)]
+        [Item]$Site,
+
+        [Parameter(Mandatory = $true, Position = 1)]
+        [string]$SiteName
+    )
+
+    begin {
+        Write-Host "Cmdlet Update-DictionaryItem - Begin"
+        Import-Function Get-DictionaryItem
+    }
+
+    process {
+        Write-Host "Cmdlet Update-DictionaryItem - Process"
+        Write-Host "Updating Dictionary item for site: $($Site.Paths.Path)"
+        
+        # Get dictionary item
+        $dictionaryItem = Get-DictionaryItem -CurrentItem $Site
+        
+        if (-not $dictionaryItem) {
+            Write-Warning "Dictionary item not found for site: $($Site.Paths.Path)"
+            return $null
+        }
+        
+        Write-Host "Found Dictionary item: $($dictionaryItem.Paths.Path) (ID: $($dictionaryItem.ID))"
+        
+        # Rename dictionary item to {sitename}-Dictionary
+        $dictionaryNewName = "$SiteName-Dictionary"
+        Write-Host "Renaming Dictionary item to: $dictionaryNewName"
+        $dictionaryItem.Editing.BeginEdit()
+        $dictionaryItem.Name = $dictionaryNewName
+        # Set DisplayName to the same value
+        if ($dictionaryItem.Fields["__Display Name"]) {
+            $dictionaryItem["__Display Name"] = $dictionaryNewName
+            Write-Host "Set DisplayName to: $dictionaryNewName"
+        }
+        $dictionaryItem.Editing.EndEdit() >> $null
+        Write-Host "Successfully renamed Dictionary item to: $dictionaryNewName" -ForegroundColor Green
+        
+        # Set Fallback Domain field
+        $fallbackDomainId = "{F50FBAE6-E5E2-4E26-8C88-0208DB5F5EC3}"
+        Write-Host "Setting Fallback Domain field to: $fallbackDomainId"
+        $dictionaryItem.Editing.BeginEdit()
+        if ($dictionaryItem.Fields["Fallback Domain"]) {
+            $dictionaryItem["Fallback Domain"] = $fallbackDomainId
+            Write-Host "Successfully set Fallback Domain field" -ForegroundColor Green
+        }
+        else {
+            Write-Warning "Fallback Domain field not found on Dictionary item"
+        }
+        
+        $dictionaryItem.Editing.EndEdit() >> $null
+        Write-Host "Completed updating Dictionary item" -ForegroundColor Green
+        
+        return $dictionaryItem
+    }
+
+    end {
+        Write-Host "Cmdlet Update-DictionaryItem - End"
     }
 }

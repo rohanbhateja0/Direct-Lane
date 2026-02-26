@@ -57,7 +57,7 @@ if ($OutputPath -match '^[a-zA-Z]+:\\') {
 $scriptTemplateId = [Sitecore.Data.ID]::Parse("{DD22F1B3-BD87-4DB2-9E7D-F7A496888D43}")
 
 # Base path in Sitecore
-$basePath = "/sitecore/system/Modules/PowerShell/Script Library/SXA/SXA - Scaffolding/Functions/Scaffolding/Site/Theme"
+$basePath = "/sitecore/system/Modules/PowerShell/Script Library/SXA/SXA - Multisite"
 
 # Ensure output directory exists using file system provider
 if (-not [string]::IsNullOrWhiteSpace($OutputPath)) {
