@@ -12,34 +12,47 @@
     )
 
     begin {
-        Write-Verbose "Cmdlet Set-SiteDefinitionName - Begin"
+        Write-Host "Cmdlet Set-SiteDefinitionName - Begin"
         Import-Function Get-SettingsItem
         Import-Function Select-InheritingFrom
     }
 
     process {
-        Write-Verbose "Cmdlet Set-SiteDefinitionName - Process"
+        Write-Host "Cmdlet Set-SiteDefinitionName - Process"
+        Write-Host "  - Site: $($Site.Paths.Path)"
+        Write-Host "  - Site definitions mapping: $($SiteDefinitionsMapping.Count) mapping(s)"
+        
         if ($siteDefinitionNames -eq $null -or $siteDefinitionNames.Count -eq 0){
+            Write-Host "  - Getting site definition names from settings..."
             $settingsItem = Get-SettingsItem $Site
             $sitegroupingItemTemplateId = "{9534A0CC-1055-4A4B-B624-05F2BE277211}"
             $siteItemTemplateId = "{2BB25752-B3BC-4F13-B9CB-38B906D21A33}"
             $sitesGroupingItem = $settingsItem.Children | Select-InheritingFrom $sitegroupingItemTemplateId | Select-Object -First 1
             $siteDefinitionNames = Get-ChildItem -Path $sitesGroupingItem.Paths.Path -Recurse | Select-InheritingFrom $siteItemTemplateId
+            Write-Host "  - Found $($siteDefinitionNames.Count) site definition(s)"
         }
-        $siteDefinitionNames | % {
+        
+        $renamedCount = 0
+        $siteDefinitionNames | ForEach-Object {
             $currentSite = $_
             $oldSiteDefinitionName = $currentSite.Name
             $newSiteDefinitionName = $SiteDefinitionsMapping[$oldSiteDefinitionName]
-            Write-Verbose "Processing $($currentSite.Name) site"
-            Write-Verbose "Changing name from: '$oldSiteDefinitionName' to: '$newSiteDefinitionName'"
+            Write-Host "  - Processing site definition: $oldSiteDefinitionName"
             if ($newSiteDefinitionName) {
+                Write-Host "    - Renaming from: '$oldSiteDefinitionName' to: '$newSiteDefinitionName'"
                 $currentSite.SiteName = $newSiteDefinitionName
                 Rename-Item $currentSite.Paths.Path $newSiteDefinitionName
+                $renamedCount++
+                Write-Host "    - Renamed successfully" -ForegroundColor Green
+            }
+            else {
+                Write-Host "    - Warning: No mapping found for '$oldSiteDefinitionName', skipping rename" -ForegroundColor Yellow
             }
         }
+        Write-Host "  - Renamed $renamedCount site definition(s)" -ForegroundColor Green
     }
 
     end {
-        Write-Verbose "Cmdlet Set-SiteDefinitionName - End"
+        Write-Host "Cmdlet Set-SiteDefinitionName - End"
     }
 }

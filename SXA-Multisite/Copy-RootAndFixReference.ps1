@@ -1,4 +1,4 @@
-﻿function Copy-RootAndFixReference {
+﻿function Copy-CBRERootAndFixReference {
     [CmdletBinding()]
     param(
         [Parameter(Mandatory = $true, Position = 0)]
@@ -12,18 +12,22 @@
     )
 
     begin {
-        Write-Verbose "Cmdlet Copy-RootAndFixReference - Begin"
-        Import-Function Set-NewLinkReference        
+        Write-Host "Cmdlet Copy-CBRERootAndFixReference - Begin"
+        Import-Function Set-CBRENewLinkReference        
     }
 
     process {
-        Write-Verbose "Cmdlet Copy-RootAndFixReference - Process"
+        Write-Host "Cmdlet Copy-CBRERootAndFixReference - Process"
+        Write-Host "  - Copying item from: $($Source.Paths.Path) to: $($Destination.Paths.Path) with name: $CopyName"
         $destinationItem = $Source.CopyTo($Destination, $CopyName)
-        Set-NewLinkReference $Source $destinationItem
+        Write-Host "  - Item copied successfully to: $($destinationItem.Paths.Path)" -ForegroundColor Green
+        Write-Host "  - Fixing link references..."
+        Set-CBRENewLinkReference $Source $destinationItem
+        Write-Host "  - Link references fixed" -ForegroundColor Green
         $destinationItem
     }
 
     end {
-        Write-Verbose "Cmdlet Copy-RootAndFixReference - End"
+        Write-Host "Cmdlet Copy-CBRERootAndFixReference - End"
     }
 }

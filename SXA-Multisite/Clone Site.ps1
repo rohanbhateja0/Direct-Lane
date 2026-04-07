@@ -8,7 +8,7 @@ Try
 {
     $ctx = Get-Item "/sitecore/content/CBRE/Template/Site Template"
     
-    Import-Function Copy-Site
+    Import-Function Copy-CBRESite
     Import-Function Show-CloneSiteDialog
     
     $dialogResult = Show-CloneSiteDialog $ctx
@@ -16,7 +16,7 @@ Try
     $mapping = $dialogResult.siteDefinitionmapping
     $location = $dialogResult.siteLocation
     
-    $destinationSite = Copy-Site $ctx $location $cloneSiteName $mapping
+    $destinationSite = Copy-CBRESite $ctx $location $cloneSiteName $mapping
     $destinationSiteID = $destinationSite.ID.ToString()
     
     $dictionary = Get-DictionaryItem $destinationSite

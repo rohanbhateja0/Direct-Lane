@@ -1,4 +1,4 @@
-﻿function Set-NewLinkReference {
+﻿function Set-CBRENewLinkReference {
     [CmdletBinding()]
     param(
         [Parameter(Mandatory = $true, Position = 0)]
@@ -15,12 +15,14 @@
     )
 
     begin {
-        Write-Verbose "Cmdlet Set-NewLinkReference - Begin"
+        Write-Host "Cmdlet Set-CBRENewLinkReference - Begin"
         $IdRegex = "[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}|((?<=link.aspx\?_id=)[0-9a-fA-F]{32})"
     }
 
     process {
-        Write-Verbose "Cmdlet Set-NewLinkReference - Process"
+        Write-Host "Cmdlet Set-CBRENewLinkReference - Process"
+        Write-Host "  - Source site: $($SourceSite.Paths.Path)"
+        Write-Host "  - Destination site: $($DestinationSite.Paths.Path)"
 
         if ($SourcePath -eq "") {
             $SourcePath = $SourceSite.Paths.Path
@@ -30,11 +32,18 @@
             $DestinationPath = $DestinationSite.Paths.Path
         }
         
+        Write-Host "  - Source path: $SourcePath"
+        Write-Host "  - Destination path: $DestinationPath"
+        
         $tmp_sourcePath = If ($SourcePath.EndsWith("/") ) { $SourcePath } Else { $SourcePath + "/" }
         $tmp_destinationPath = If ($DestinationPath.EndsWith("/") ) { $DestinationPath } Else { $DestinationPath + "/" }
 
+        Write-Host "  - Scanning items for link references..."
+        $itemCount = 0
+        $referenceCount = 0
         $processed = New-Object System.Collections.Specialized.OrderedDictionary
         Get-ChildItem -Path $DestinationSite.Paths.Path -Recurse -Language * -WithParent |  ForEach-Object {
+            $itemCount++
             $currentItem = $_
             $_.Fields.ReadAll()
 
@@ -57,7 +66,8 @@
                             $desiredItem = $currentItem.Database.GetItem($desiredItemPath)
 
                             if ($desiredItem -ne $null) {
-                                Write-Verbose "Replacing ID from: $($id) to: $($desiredItem.ID) for $($field.Name) field [$($currentItem.Language.Name)]"
+                                $referenceCount++
+                                Write-Host "    - Replacing ID from: $($id) to: $($desiredItem.ID) for $($field.Name) field [$($currentItem.Language.Name)] on item: $($currentItem.Paths.Path)"
                                 $fieldValue = $currentItem.Fields[$field.Name].Value;
                                 if ($idMatch.Value.Contains("-")) {
                                     $guidFormat = "D"
@@ -74,7 +84,7 @@
                                 $processed.Add($key, 0)
                             }
                             else {
-                                Write-Verbose "Could not resolve desired item for path: $($desireItemdPath)"
+                                Write-Host "    - Warning: Could not resolve desired item for path: $($desiredItemPath)" -ForegroundColor Yellow
                             }
                         }
                     }
@@ -83,13 +93,15 @@
 
             $fieldsWithPaths = $_.Fields | ? { [regex]::IsMatch($_.Value, $SourcePath) }
             foreach ($field in $fieldsWithPaths) {
-                Write-Verbose "Replacing path from: '$SourcePath' to: '$DestinationPath' for $($field.Name) field"
+                $referenceCount++
+                Write-Host "    - Replacing path from: '$SourcePath' to: '$DestinationPath' for $($field.Name) field on item: $($currentItem.Paths.Path)"
                 $currentItem."$($field.Name)" = $currentItem."$($field.Name)".Replace($SourcePath, $DestinationPath)
             }            
         }
+        Write-Host "  - Processed $itemCount item(s), updated $referenceCount reference(s)" -ForegroundColor Green
     }
 
     end {
-        Write-Verbose "Cmdlet Set-NewLinkReference - End"
+        Write-Host "Cmdlet Set-CBRENewLinkReference - End"
     }
 }
